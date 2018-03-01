@@ -1,3 +1,5 @@
+:information_source: **IMPORTANT: This repository is used for class [PV204 Security Technologies at Masaryk University](https://is.muni.cz/auth/predmety/predmet?lang=en;setlang=en;pvysl=3141746). All meaningful improvements will be attempted to be pushed to upstream repository in June 2018.**
+
 == YubiKey NEO App: OpenPGP
 
 image:https://travis-ci.org/Yubico/ykneo-openpgp.svg?branch=master["Build Status", link="https://travis-ci.org/Yubico/ykneo-openpgp"]
@@ -42,3 +44,4 @@ The default PIN set is `123456' and the default admin PIN is `12345678'
 We have tutorials on specific topics in at
 https://developers.yubico.com/PGP[developers.yubico.com/PGP], for example card
 editing and key import.
+

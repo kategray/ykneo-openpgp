@@ -2,7 +2,7 @@
 
 == YubiKey NEO App: OpenPGP
 
-image:https://travis-ci.org/Yubico/ykneo-openpgp.svg?branch=master["Build Status", link="https://travis-ci.org/Yubico/ykneo-openpgp"]
+[![Build status](https://travis-ci.org/JavaCardSpot-dev/ykneo-openpgp.svg?branch=master)](https://travis-ci.org/JavaCardSpot-dev/ykneo-openpgp)
 
 [IMPORTANT]
 ====

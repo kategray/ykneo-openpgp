@@ -58,7 +58,6 @@
         <pathelement path="${build}"/>
         <fileset dir="${test.lib}">
           <include name="*.jar"/>
-          <include name="**/junit-4.12.jar" />
         </fileset>
       </classpath>
     </javac>

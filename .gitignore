@@ -13,7 +13,6 @@ ykneo-openpgp-*.tar.gz.sig
 test/.classpath
 test/.project
 test/lib/jcardsim-2.2.2-all.jar
-test/lib/hamcrest-all-1.3.jar
 jacoco.exec
 jacoco.xml
 jacoco/

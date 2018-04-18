@@ -427,25 +427,30 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	}
 
 	private void setPinRetries(byte pin_retries, byte reset_retries, byte admin_retries) {
-		if (!pw3.isValidated()) {
+		if (pw3.isValidated()) {
+			if (! (pw3.isValidated() == false)) {
+				if (pin_retries != 0) {
+					pw1 = new OwnerPIN(pin_retries, PW1_MAX_LENGTH);
+					pw1.update(PW1_DEFAULT, _0, (byte) PW1_DEFAULT.length);
+					pw1_length = (byte) PW1_DEFAULT.length;
+					pw1_status = 0x00;
+				}
+				if (reset_retries != 0) {
+					rc = new OwnerPIN(reset_retries, RC_MAX_LENGTH);
+					rc_length = 0;
+				}
+				if (admin_retries != 0) {
+					pw3 = new OwnerPIN(admin_retries, PW3_MAX_LENGTH);
+					pw3.update(PW3_DEFAULT, _0, (byte) PW3_DEFAULT.length);
+					pw3_length = (byte) PW3_DEFAULT.length;
+				}
+				JCSystem.requestObjectDeletion();
+			} else {
+				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+			}
+		} else {
 			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 		}
-		if (pin_retries != 0) {
-			pw1 = new OwnerPIN(pin_retries, PW1_MAX_LENGTH);
-			pw1.update(PW1_DEFAULT, _0, (byte) PW1_DEFAULT.length);
-			pw1_length = (byte) PW1_DEFAULT.length;
-			pw1_status = 0x00;
-		}
-		if (reset_retries != 0) {
-			rc = new OwnerPIN(reset_retries, RC_MAX_LENGTH);
-			rc_length = 0;
-		}
-		if (admin_retries != 0) {
-			pw3 = new OwnerPIN(admin_retries, PW3_MAX_LENGTH);
-			pw3.update(PW3_DEFAULT, _0, (byte) PW3_DEFAULT.length);
-			pw3_length = (byte) PW3_DEFAULT.length;
-		}
-		JCSystem.requestObjectDeletion();
 	}
 
 	/**
@@ -628,9 +633,15 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
 		} else if (mode == (byte) 0x02) {
 			// Authentication using PW3
-			if (!pw3.isValidated())
+			if (pw3.isValidated()) {
+				if (!(pw3.isValidated() == false)) {
+					new_length = in_received;
+				} else {
+					ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+				}
+			} else {
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
-			new_length = in_received;
+			}
 		} else {
 			ISOException.throwIt(SW_WRONG_P1P2);
 		}
@@ -659,28 +670,34 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @return Length of data written in buffer
 	 */
 	private short computeDigitalSignature(APDU apdu) {
-		if (!(pw1.isValidated() && pw1_modes[PW1_MODE_NO81] == TRUE_BYTE))
+		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO81] == TRUE_BYTE) {
+			if (! (pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO81] == FALSE_BYTE) {
+				if (pw1_status == (byte) 0x00)
+					pw1_modes[PW1_MODE_NO81] = FALSE_BYTE;
+
+				if (!sig_key.getPrivate().isInitialized())
+					ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
+
+				cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
+
+				short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
+
+				// Perform the operation again for double check
+				byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+				cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
+				short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
+				checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
+
+				increaseDSCounter();
+				Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
+				return length;
+			} else {
+				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			}
+		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-
-		if (pw1_status == (byte) 0x00)
-			pw1_modes[PW1_MODE_NO81] = FALSE_BYTE;
-
-		if (!sig_key.getPrivate().isInitialized())
-			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
-
-		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
-
-		short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
-
-		// Perform the operation again for double check
-		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
-		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
-		short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
-		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
-
-		increaseDSCounter();
-		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
-		return length;
+		}
+		return 0;
 	}
 
 	/**
@@ -695,24 +712,31 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 */
 	private short decipher(APDU apdu) {
 		// DECIPHER
-		if (!(pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE))
+		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
+			if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] == FALSE_BYTE) {
+				if (!dec_key.getPrivate().isInitialized())
+					ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
+
+				cipher.init(dec_key.getPrivate(), Cipher.MODE_DECRYPT);
+
+				// Start at offset 1 to omit padding indicator byte
+				short length = cipher.doFinal(buffer, (short) 1, (short) (in_received - 1), buffer, in_received);
+
+				// Perform the operation again for double check
+				byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+				cipher.init(dec_key.getPrivate(), Cipher.MODE_DECRYPT);
+				short checkLength = cipher.doFinal(buffer, (short) 1, (short) (in_received - 1), checkBuffer, _0);
+				checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
+
+				Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
+				return length;
+			} else {
+				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			}
+		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-		if (!dec_key.getPrivate().isInitialized())
-			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
-
-		cipher.init(dec_key.getPrivate(), Cipher.MODE_DECRYPT);
-
-		// Start at offset 1 to omit padding indicator byte
-		short length = cipher.doFinal(buffer, (short)1, (short) (in_received - 1), buffer, in_received);
-
-		// Perform the operation again for double check
-		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
-		cipher.init(dec_key.getPrivate(), Cipher.MODE_DECRYPT);
-		short checkLength = cipher.doFinal(buffer, (short)1, (short) (in_received - 1), checkBuffer, _0);
-		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
-
-		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
-		return length;
+		}
+		return 0;
 	}
 
 	/**
@@ -725,23 +749,29 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @return Length of data written in buffer
 	 */
 	private short internalAuthenticate(APDU apdu) {
-		if (!(pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE))
+		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
+			if (! (pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] == FALSE_BYTE) {
+				if (!auth_key.getPrivate().isInitialized())
+					ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
+
+				cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
+				short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
+
+				// Perform the operation again for double check
+				byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+				cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
+				short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
+				checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
+
+				Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
+				return length;
+			} else {
+				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			}
+		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-
-		if (!auth_key.getPrivate().isInitialized())
-			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
-
-		cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
-		short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
-
-		// Perform the operation again for double check
-		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
-		cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
-		short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
-		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
-
-		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
-		return length;
+		}
+		return 0;
 	}
 
 	/**
@@ -761,21 +791,36 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @return Length of data written in buffer
 	 */
 	private short genAsymKey(APDU apdu, byte mode) {
-		PGPKey key = getKey(buffer[0]);
 
-		if (mode == (byte) 0x80) {
-			if (!pw3.isValidated())
+		if (pw3.isValidated()) {
+			if (!(pw3.isValidated() == false)) {
+
+				if (mode == (byte) 0x80 || mode == (byte) 0x81) {
+
+					PGPKey key = getKey(buffer[0]);
+
+					if (mode == (byte) 0x80) {
+						key.genKeyPair();
+
+						if (buffer[0] == (byte) 0xB6) {
+							Util.arrayFillNonAtomic(ds_counter, _0, (short) 3, (byte) 0);
+						}
+					}
+
+					// Output requested key
+					return sendPublicKey(key);
+
+				} else {
+					ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+				}
+
+			} else {
 				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-
-			key.genKeyPair();
-
-			if (buffer[0] == (byte) 0xB6) {
-				Util.arrayFillNonAtomic(ds_counter, _0, (short) 3, (byte) 0);
 			}
+		} else {
+			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 		}
-
-		// Output requested key
-		return sendPublicKey(key);
+		return 0;
 	}
 
 	/**
@@ -983,17 +1028,28 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		// 0103 - Private Use DO 3
 		case (short) 0x0103:
 			// For private use DO 3, PW1 must be verified with mode 82 to read
-			if (!(pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE))
+			if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
+				if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] == FALSE_BYTE) {
+					return Util.arrayCopyNonAtomic(private_use_do_3, _0, buffer, _0, private_use_do_3_length);
+				} else {
+					ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				}
+			} else {
 				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-		return Util.arrayCopyNonAtomic(private_use_do_3, _0, buffer, _0, private_use_do_3_length);
+			}
 
 		// 0104 - Private Use DO 4
 		case (short) 0x0104:
 			// For private use DO 4, PW3 must be verified to read
-			if (!pw3.isValidated())
+			if (pw3.isValidated()) {
+				if (!(pw3.isValidated() == false)) {
+					return Util.arrayCopyNonAtomic(private_use_do_4, _0, buffer, _0, private_use_do_4_length);
+				} else {
+					ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				}
+			} else {
 				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-		return Util.arrayCopyNonAtomic(private_use_do_4, _0, buffer, _0, private_use_do_4_length);
-
+			}
 
 		default:
 			ISOException.throwIt(SW_RECORD_NOT_FOUND);
@@ -1017,253 +1073,267 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		if(tag == 0x0101 || tag == 0x0103) {
 			// Special case for private use DO's 1 and 3: these can be written if
 			// PW1 is verified with mode 82. All others require PW3 verification.
-			if (!(pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE))
-				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-			if (in_received > PRIVATE_DO_MAX_LENGTH)
-				ISOException.throwIt(SW_WRONG_LENGTH);
+			if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
+				if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] == FALSE_BYTE) {
+					if (in_received > PRIVATE_DO_MAX_LENGTH)
+						ISOException.throwIt(SW_WRONG_LENGTH);
 
-			switch (tag) {
-			// 0101 - Private Use DO 1
-			case 0x0101:
-				JCSystem.beginTransaction();
-				private_use_do_1_length = in_received;
-				Util.arrayCopy(buffer, _0, private_use_do_1, _0, in_received);
-				JCSystem.commitTransaction();
-				break;
+					switch (tag) {
+						// 0101 - Private Use DO 1
+						case 0x0101:
+							JCSystem.beginTransaction();
+							private_use_do_1_length = in_received;
+							Util.arrayCopy(buffer, _0, private_use_do_1, _0, in_received);
+							JCSystem.commitTransaction();
+							break;
 
-			// 0103 - Private Use DO 3
-			case 0x0103:
-				JCSystem.beginTransaction();
-				private_use_do_3_length = in_received;
-				Util.arrayCopy(buffer, _0, private_use_do_3, _0, in_received);
-				JCSystem.commitTransaction();
-				break;
-			}
-			return;
-		}
-
-		if (!pw3.isValidated())
-			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-
-		switch (tag) {
-		// 5B - Name
-		case (short) 0x005B:
-			if (in_received > name.length)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			JCSystem.beginTransaction();
-			name_length = Util.arrayCopy(buffer, _0, name, _0, in_received);
-			JCSystem.commitTransaction();
-			break;
-
-		// 5E - Login data
-		case (short) 0x005E:
-			if (in_received > loginData.length)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			JCSystem.beginTransaction();
-			loginData_length = Util.arrayCopy(buffer, _0, loginData, _0,
-					in_received);
-			JCSystem.commitTransaction();
-			break;
-
-		// 5F2D - Language preferences
-		case (short) 0x5F2D:
-			if (in_received > lang.length)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			JCSystem.beginTransaction();
-			lang_length = Util.arrayCopy(buffer, _0, lang, _0, in_received);
-			JCSystem.commitTransaction();
-			break;
-
-		// 5F35 - Sex
-		case (short) 0x5F35:
-			if (in_received != 1)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			// Check for valid values
-			if (buffer[0] != (byte) 0x31 && buffer[0] != (byte) 0x32
-					&& buffer[0] != (byte) 0x39)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			sex = buffer[0];
-			break;
-
-		// 5F50 - URL
-		case (short) 0x5F50:
-			if (in_received > url.length)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			JCSystem.beginTransaction();
-			url_length = Util.arrayCopy(buffer, _0, url, _0, in_received);
-			JCSystem.commitTransaction();
-			break;
-
-		// 7F21 - Cardholder certificate
-		case (short) 0x7F21:
-			if (in_received > CERT_MAX_LENGTH)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			if (cert == null) {
-				cert = new byte[CERT_MAX_LENGTH];
-			}
-			cert_length = Util.arrayCopyNonAtomic(buffer, _0, cert, _0, in_received);
-			break;
-
-		// C4 - PW Status Bytes
-		case (short) 0x00C4:
-			if (in_received != 1)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			// Check for valid values
-			if (buffer[0] != (byte) 0x00 && buffer[0] != (byte) 0x01)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			pw1_status = buffer[0];
-			break;
-
-		// C7 - Fingerprint signature key
-		case (short) 0x00C7:
-			if (in_received != PGPKey.FP_SIZE)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			sig_key.setFingerprint(buffer, _0);
-			break;
-
-		// C8 - Fingerprint decryption key
-		case (short) 0x00C8:
-			if (in_received != PGPKey.FP_SIZE)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			dec_key.setFingerprint(buffer, _0);
-			break;
-
-		// C9 - Fingerprint authentication key
-		case (short) 0x00C9:
-			if (in_received != PGPKey.FP_SIZE)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			auth_key.setFingerprint(buffer, _0);
-			break;
-
-		// CA - Fingerprint Certification Authority 1
-		case (short) 0x00CA:
-			if (in_received != FP_LENGTH)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			Util.arrayCopy(buffer, _0, ca1_fp, _0, in_received);
-			break;
-
-		// CB - Fingerprint Certification Authority 2
-		case (short) 0x00CB:
-			if (in_received != FP_LENGTH)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			Util.arrayCopy(buffer, _0, ca2_fp, _0, in_received);
-			break;
-
-		// CC - Fingerprint Certification Authority 3
-		case (short) 0x00CC:
-			if (in_received != FP_LENGTH)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			Util.arrayCopy(buffer, _0, ca3_fp, _0, in_received);
-			break;
-
-		// CE - Signature key generation date/time
-		case (short) 0x00CE:
-			if (in_received != 4)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			sig_key.setTime(buffer, _0);
-			break;
-
-		// CF - Decryption key generation date/time
-		case (short) 0x00CF:
-			if (in_received != 4)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			dec_key.setTime(buffer, _0);
-			break;
-
-		// D0 - Authentication key generation date/time
-		case (short) 0x00D0:
-			if (in_received != 4)
-				ISOException.throwIt(SW_WRONG_DATA);
-
-			auth_key.setTime(buffer, _0);
-			break;
-
-		// D3 - Resetting Code
-		case (short) 0x00D3:
-			if (in_received == 0) {
-				rc_length = 0;
-			} else if (in_received >= RC_MIN_LENGTH
-					&& in_received <= RC_MAX_LENGTH) {
-				JCSystem.beginTransaction();
-				rc.update(buffer, _0, (byte) in_received);
-				rc_length = (byte) in_received;
-				rc.resetAndUnblock();
-				JCSystem.commitTransaction();
+						// 0103 - Private Use DO 3
+						case 0x0103:
+							JCSystem.beginTransaction();
+							private_use_do_3_length = in_received;
+							Util.arrayCopy(buffer, _0, private_use_do_3, _0, in_received);
+							JCSystem.commitTransaction();
+							break;
+					}
+					return;
+				} else {
+					ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				}
 			} else {
-				ISOException.throwIt(SW_WRONG_DATA);
-			}
-			break;
-
-		// D1 - SM-Key-ENC
-		case (short) 0x00D1:
-			sm.setSessionKeyEncryption(buffer, _0);
-			break;
-			
-		// D2 - SM-Key-MAC
-		case (short) 0x00D2:
-			sm.setSessionKeyMAC(buffer, _0);
-			break;
-			
-		// F4 - SM-Key-Container
-		case (short) 0x00F4:
-			short offset = 0;
-			short key_len = 0; 
-			// Set encryption key
-			if (buffer[offset++] == (byte)0xD1) {
-				key_len = (short)(buffer[offset++] & 0x7F);
-				sm.setSessionKeyEncryption(buffer, offset);
-				offset += key_len;
+				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 			}
 
-			// Set MAC key			
-			if (buffer[offset++] == (byte)0xD2) {
-				key_len = (short)(buffer[offset++] & 0x7F);
-				sm.setSessionKeyMAC(buffer, offset);
-				offset += key_len;
-			}
-			break;
-
-		// 0102 - Private Use DO 2
-		case 0x0102:
-			if (in_received > PRIVATE_DO_MAX_LENGTH)
-				ISOException.throwIt(SW_WRONG_LENGTH);
-			JCSystem.beginTransaction();
-			private_use_do_2_length = in_received;
-			Util.arrayCopy(buffer, _0, private_use_do_2, _0, in_received);
-			JCSystem.commitTransaction();
-			break;
-
-		// 0104 - Private Use DO 4
-		case 0x0104:
-			if (in_received > PRIVATE_DO_MAX_LENGTH)
-				ISOException.throwIt(SW_WRONG_LENGTH);
-			JCSystem.beginTransaction();
-			private_use_do_4_length = in_received;
-			Util.arrayCopy(buffer, _0, private_use_do_4, _0, in_received);
-			JCSystem.commitTransaction();
-			break;
-
-		default:
-			ISOException.throwIt(SW_RECORD_NOT_FOUND);
-			break;
 		}
+
+		if (pw3.isValidated()) {
+			if (!(pw3.isValidated() == false)) {
+
+				switch (tag) {
+					// 5B - Name
+					case (short) 0x005B:
+						if (in_received > name.length)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						JCSystem.beginTransaction();
+						name_length = Util.arrayCopy(buffer, _0, name, _0, in_received);
+						JCSystem.commitTransaction();
+						break;
+
+					// 5E - Login data
+					case (short) 0x005E:
+						if (in_received > loginData.length)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						JCSystem.beginTransaction();
+						loginData_length = Util.arrayCopy(buffer, _0, loginData, _0,
+								in_received);
+						JCSystem.commitTransaction();
+						break;
+
+					// 5F2D - Language preferences
+					case (short) 0x5F2D:
+						if (in_received > lang.length)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						JCSystem.beginTransaction();
+						lang_length = Util.arrayCopy(buffer, _0, lang, _0, in_received);
+						JCSystem.commitTransaction();
+						break;
+
+					// 5F35 - Sex
+					case (short) 0x5F35:
+						if (in_received != 1)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						// Check for valid values
+						if (buffer[0] != (byte) 0x31 && buffer[0] != (byte) 0x32
+								&& buffer[0] != (byte) 0x39)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						sex = buffer[0];
+						break;
+
+					// 5F50 - URL
+					case (short) 0x5F50:
+						if (in_received > url.length)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						JCSystem.beginTransaction();
+						url_length = Util.arrayCopy(buffer, _0, url, _0, in_received);
+						JCSystem.commitTransaction();
+						break;
+
+					// 7F21 - Cardholder certificate
+					case (short) 0x7F21:
+						if (in_received > CERT_MAX_LENGTH)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						if (cert == null) {
+							cert = new byte[CERT_MAX_LENGTH];
+						}
+						cert_length = Util.arrayCopyNonAtomic(buffer, _0, cert, _0, in_received);
+						break;
+
+					// C4 - PW Status Bytes
+					case (short) 0x00C4:
+						if (in_received != 1)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						// Check for valid values
+						if (buffer[0] != (byte) 0x00 && buffer[0] != (byte) 0x01)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						pw1_status = buffer[0];
+						break;
+
+					// C7 - Fingerprint signature key
+					case (short) 0x00C7:
+						if (in_received != PGPKey.FP_SIZE)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						sig_key.setFingerprint(buffer, _0);
+						break;
+
+					// C8 - Fingerprint decryption key
+					case (short) 0x00C8:
+						if (in_received != PGPKey.FP_SIZE)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						dec_key.setFingerprint(buffer, _0);
+						break;
+
+					// C9 - Fingerprint authentication key
+					case (short) 0x00C9:
+						if (in_received != PGPKey.FP_SIZE)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						auth_key.setFingerprint(buffer, _0);
+						break;
+
+					// CA - Fingerprint Certification Authority 1
+					case (short) 0x00CA:
+						if (in_received != FP_LENGTH)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						Util.arrayCopy(buffer, _0, ca1_fp, _0, in_received);
+						break;
+
+					// CB - Fingerprint Certification Authority 2
+					case (short) 0x00CB:
+						if (in_received != FP_LENGTH)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						Util.arrayCopy(buffer, _0, ca2_fp, _0, in_received);
+						break;
+
+					// CC - Fingerprint Certification Authority 3
+					case (short) 0x00CC:
+						if (in_received != FP_LENGTH)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						Util.arrayCopy(buffer, _0, ca3_fp, _0, in_received);
+						break;
+
+					// CE - Signature key generation date/time
+					case (short) 0x00CE:
+						if (in_received != 4)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						sig_key.setTime(buffer, _0);
+						break;
+
+					// CF - Decryption key generation date/time
+					case (short) 0x00CF:
+						if (in_received != 4)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						dec_key.setTime(buffer, _0);
+						break;
+
+					// D0 - Authentication key generation date/time
+					case (short) 0x00D0:
+						if (in_received != 4)
+							ISOException.throwIt(SW_WRONG_DATA);
+
+						auth_key.setTime(buffer, _0);
+						break;
+
+					// D3 - Resetting Code
+					case (short) 0x00D3:
+						if (in_received == 0) {
+							rc_length = 0;
+						} else if (in_received >= RC_MIN_LENGTH
+								&& in_received <= RC_MAX_LENGTH) {
+							JCSystem.beginTransaction();
+							rc.update(buffer, _0, (byte) in_received);
+							rc_length = (byte) in_received;
+							rc.resetAndUnblock();
+							JCSystem.commitTransaction();
+						} else {
+							ISOException.throwIt(SW_WRONG_DATA);
+						}
+						break;
+
+					// D1 - SM-Key-ENC
+					case (short) 0x00D1:
+						sm.setSessionKeyEncryption(buffer, _0);
+						break;
+
+					// D2 - SM-Key-MAC
+					case (short) 0x00D2:
+						sm.setSessionKeyMAC(buffer, _0);
+						break;
+
+					// F4 - SM-Key-Container
+					case (short) 0x00F4:
+						short offset = 0;
+						short key_len = 0;
+						// Set encryption key
+						if (buffer[offset++] == (byte) 0xD1) {
+							key_len = (short) (buffer[offset++] & 0x7F);
+							sm.setSessionKeyEncryption(buffer, offset);
+							offset += key_len;
+						}
+
+						// Set MAC key
+						if (buffer[offset++] == (byte) 0xD2) {
+							key_len = (short) (buffer[offset++] & 0x7F);
+							sm.setSessionKeyMAC(buffer, offset);
+							offset += key_len;
+						}
+						break;
+
+					// 0102 - Private Use DO 2
+					case 0x0102:
+						if (in_received > PRIVATE_DO_MAX_LENGTH)
+							ISOException.throwIt(SW_WRONG_LENGTH);
+						JCSystem.beginTransaction();
+						private_use_do_2_length = in_received;
+						Util.arrayCopy(buffer, _0, private_use_do_2, _0, in_received);
+						JCSystem.commitTransaction();
+						break;
+
+					// 0104 - Private Use DO 4
+					case 0x0104:
+						if (in_received > PRIVATE_DO_MAX_LENGTH)
+							ISOException.throwIt(SW_WRONG_LENGTH);
+						JCSystem.beginTransaction();
+						private_use_do_4_length = in_received;
+						Util.arrayCopy(buffer, _0, private_use_do_4, _0, in_received);
+						JCSystem.commitTransaction();
+						break;
+
+					default:
+						ISOException.throwIt(SW_RECORD_NOT_FOUND);
+						break;
+				}
+			} else {
+				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			}
+		} else {
+			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+		}
+
 	}
 
 	/**
@@ -1272,91 +1342,98 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @param apdu
 	 */
 	private void importKey(APDU apdu) {
-		short offset = 0;
 
-		if (!pw3.isValidated())
+		if (pw3.isValidated()) {
+			if (!(pw3.isValidated() == false)) {
+
+				short offset = 0;
+
+				// Check for tag 4D
+				if (buffer[offset++] != 0x4D)
+					ISOException.throwIt(SW_DATA_INVALID);
+
+				// Length of 4D
+				offset += getLengthBytes(getLength(buffer, offset));
+
+				// Get key for Control Reference Template
+				PGPKey key = getKey(buffer[offset++]);
+
+				// Skip empty length of CRT
+				offset++;
+
+				// Check for tag 7F48
+				if (buffer[offset++] != 0x7F || buffer[offset++] != 0x48)
+					ISOException.throwIt(SW_DATA_INVALID);
+				short len_template = getLength(buffer, offset);
+				offset += getLengthBytes(len_template);
+
+				short offset_data = (short) (offset + len_template);
+
+				if (buffer[offset++] != (byte) 0x91)
+					ISOException.throwIt(SW_DATA_INVALID);
+				short len_e = getLength(buffer, offset);
+				offset += getLengthBytes(len_e);
+
+				if (buffer[offset++] != (byte) 0x92)
+					ISOException.throwIt(SW_DATA_INVALID);
+				short len_p = getLength(buffer, offset);
+				offset += getLengthBytes(len_p);
+
+				if (buffer[offset++] != (byte) 0x93)
+					ISOException.throwIt(SW_DATA_INVALID);
+				short len_q = getLength(buffer, offset);
+				offset += getLengthBytes(len_q);
+
+				if (buffer[offset++] != (byte) 0x94)
+					ISOException.throwIt(SW_DATA_INVALID);
+				short len_pq = getLength(buffer, offset);
+				offset += getLengthBytes(len_pq);
+
+				if (buffer[offset++] != (byte) 0x95)
+					ISOException.throwIt(SW_DATA_INVALID);
+				short len_dp1 = getLength(buffer, offset);
+				offset += getLengthBytes(len_dp1);
+
+				if (buffer[offset++] != (byte) 0x96)
+					ISOException.throwIt(SW_DATA_INVALID);
+				short len_dq1 = getLength(buffer, offset);
+				offset += getLengthBytes(len_dq1);
+
+				if (buffer[offset++] != (byte) 0x97)
+					ISOException.throwIt(SW_DATA_INVALID);
+				short len_modulus = getLength(buffer, offset);
+				offset += getLengthBytes(len_modulus);
+
+				if (buffer[offset_data++] != 0x5F || buffer[offset_data++] != 0x48)
+					ISOException.throwIt(SW_DATA_INVALID);
+				offset_data += getLengthBytes(getLength(buffer, offset_data));
+
+				key.setExponent(buffer, offset_data, len_e);
+				offset_data += len_e;
+
+				key.setP(buffer, offset_data, len_p);
+				offset_data += len_p;
+
+				key.setQ(buffer, offset_data, len_q);
+				offset_data += len_q;
+
+				key.setPQ(buffer, offset_data, len_pq);
+				offset_data += len_pq;
+
+				key.setDP1(buffer, offset_data, len_dp1);
+				offset_data += len_dp1;
+
+				key.setDQ1(buffer, offset_data, len_dq1);
+				offset_data += len_dq1;
+
+				key.setModulus(buffer, offset_data, len_modulus);
+				offset_data += len_modulus;
+			} else {
+				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			}
+		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-
-		// Check for tag 4D
-		if (buffer[offset++] != 0x4D)
-			ISOException.throwIt(SW_DATA_INVALID);
-
-		// Length of 4D
-		offset += getLengthBytes(getLength(buffer, offset));
-
-		// Get key for Control Reference Template
-		PGPKey key = getKey(buffer[offset++]);
-
-		// Skip empty length of CRT
-		offset++;
-
-		// Check for tag 7F48
-		if (buffer[offset++] != 0x7F || buffer[offset++] != 0x48)
-			ISOException.throwIt(SW_DATA_INVALID);
-		short len_template = getLength(buffer, offset);
-		offset += getLengthBytes(len_template);
-
-		short offset_data = (short) (offset + len_template);
-
-		if (buffer[offset++] != (byte) 0x91)
-			ISOException.throwIt(SW_DATA_INVALID);
-		short len_e = getLength(buffer, offset);
-		offset += getLengthBytes(len_e);
-
-		if (buffer[offset++] != (byte) 0x92)
-			ISOException.throwIt(SW_DATA_INVALID);
-		short len_p = getLength(buffer, offset);
-		offset += getLengthBytes(len_p);
-
-		if (buffer[offset++] != (byte) 0x93)
-			ISOException.throwIt(SW_DATA_INVALID);
-		short len_q = getLength(buffer, offset);
-		offset += getLengthBytes(len_q);
-
-		if (buffer[offset++] != (byte) 0x94)
-			ISOException.throwIt(SW_DATA_INVALID);
-		short len_pq = getLength(buffer, offset);
-		offset += getLengthBytes(len_pq);
-
-		if (buffer[offset++] != (byte) 0x95)
-			ISOException.throwIt(SW_DATA_INVALID);
-		short len_dp1 = getLength(buffer, offset);
-		offset += getLengthBytes(len_dp1);
-
-		if (buffer[offset++] != (byte) 0x96)
-			ISOException.throwIt(SW_DATA_INVALID);
-		short len_dq1 = getLength(buffer, offset);
-		offset += getLengthBytes(len_dq1);
-
-		if (buffer[offset++] != (byte) 0x97)
-			ISOException.throwIt(SW_DATA_INVALID);
-		short len_modulus = getLength(buffer, offset);
-		offset += getLengthBytes(len_modulus);
-
-		if (buffer[offset_data++] != 0x5F || buffer[offset_data++] != 0x48)
-			ISOException.throwIt(SW_DATA_INVALID);
-		offset_data += getLengthBytes(getLength(buffer, offset_data));
-
-		key.setExponent(buffer, offset_data, len_e);
-		offset_data += len_e;
-
-		key.setP(buffer, offset_data, len_p);
-		offset_data += len_p;
-
-		key.setQ(buffer, offset_data, len_q);
-		offset_data += len_q;
-
-		key.setPQ(buffer, offset_data, len_pq);
-		offset_data += len_pq;
-
-		key.setDP1(buffer, offset_data, len_dp1);
-		offset_data += len_dp1;
-
-		key.setDQ1(buffer, offset_data, len_dq1);
-		offset_data += len_dq1;
-
-		key.setModulus(buffer, offset_data, len_modulus);
-		offset_data += len_modulus;
+		}
 	}
 
 	/**

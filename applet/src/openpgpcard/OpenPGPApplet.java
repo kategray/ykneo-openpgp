@@ -99,6 +99,9 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 	private static final byte FI_MAX = 10;
 
+	private static final short APPLET_INVALIDATED = 0x6283;
+	private static final short INVALID_STATE = (short) 0x9481;
+
 	private byte[] loginData;
 	private short loginData_length;
 
@@ -664,20 +667,13 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
 
-
 		short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
 
 		// Perform the operation again for double check
 		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
-
 		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
 		short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
-
-		if (!compareByteSubarrays(buffer, in_received, length, checkBuffer, _0, checkLength)) {
-			++fi_counter;
-			if (fi_counter >= FI_MAX)
-				eraseKeys();
-		}
+		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
 
 		increaseDSCounter();
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
@@ -705,6 +701,13 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 		// Start at offset 1 to omit padding indicator byte
 		short length = cipher.doFinal(buffer, (short)1, (short) (in_received - 1), buffer, in_received);
+
+		// Perform the operation again for double check
+		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+		cipher.init(dec_key.getPrivate(), Cipher.MODE_DECRYPT);
+		short checkLength = cipher.doFinal(buffer, (short)1, (short) (in_received - 1), checkBuffer, _0);
+		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
+
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
 		return length;
 	}
@@ -727,6 +730,13 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 		cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
 		short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
+
+		// Perform the operation again for double check
+		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+		cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
+		short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
+		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
+
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
 		return length;
 	}
@@ -1584,13 +1594,26 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		return dummy; // to prevent optimizing the loop out
 	}
 
-	private static boolean compareByteSubarrays(byte[] a1, short offset1, short length1, byte[] a2, short offset2, short length2) {
-		if (length1 != length2)
-			return false;
-		for (short i = _0; i < length1; ++i)
-			if (a1[(short) (offset1 + i)] != a2[(short) (offset2 + i)])
-				return false;
-		return true;
+	private void checkResults(byte[] a1, short offset1, short length1, byte[] a2, short offset2, short length2) {
+		if (length1 != length2) {
+			++fi_counter;
+			if (fi_counter >= FI_MAX) {
+				eraseKeys();
+				ISOException.throwIt(APPLET_INVALIDATED);
+			}
+			ISOException.throwIt(INVALID_STATE);
+		}
+
+		for (short i = _0; i < length1; ++i) {
+			if (a1[(short) (offset1 + i)] != a2[(short) (offset2 + i)]) {
+				++fi_counter;
+				if (fi_counter >= FI_MAX) {
+					eraseKeys();
+					ISOException.throwIt(APPLET_INVALIDATED);
+				}
+				ISOException.throwIt(INVALID_STATE);
+			}
+		}
 	}
 
 	private void eraseKeys() {

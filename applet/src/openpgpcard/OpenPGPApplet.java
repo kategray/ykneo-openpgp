@@ -1588,7 +1588,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		if (length1 != length2)
 			return false;
 		for (short i = _0; i < length1; ++i)
-			if (a1[offset1 + i] != a2[offset2 + i])
+			if (a1[(short) (offset1 + i)] != a2[(short) (offset2 + i)])
 				return false;
 		return true;
 	}

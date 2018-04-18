@@ -75,6 +75,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	private static short PRIVATE_DO_MAX_LENGTH = 254;
 	
 	private static short FP_LENGTH = 20;
+	private static short DIGEST_LENGTH = 32; // SHA256
 
 	private static byte PW1_MIN_LENGTH = 6;
 	private static byte PW1_MAX_LENGTH = 127;
@@ -149,6 +150,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 	private Cipher cipher;
 	private RandomData random;
+	private MessageDigest digest;
 
 	private byte[] buffer;
 	private short out_left = 0;
@@ -230,6 +232,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 		cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false);
 		random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+		digest = MessageDigest.getInstance(MessageDigest.ALG_SHA_256,false);
 		
 		sm = new OpenPGPSecureMessaging();
 
@@ -553,7 +556,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	/**
 	 * Provide the CHANGE REFERENCE DATA command (INS 24)
 	 * 
-	 * Change the password specified using mode: - 81: PW1 - 82: PW3
+	 * Change the password specified using mode: - 81: PW1 - 83: PW3
 	 * 
 	 * @param apdu
 	 * @param mode

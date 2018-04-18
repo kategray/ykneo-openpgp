@@ -97,6 +97,8 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	private static final byte FALSE_BYTE = 0x5A;
 	private static final byte TRUE_BYTE = (byte) 0xA5;
 
+	private static final byte FI_MAX = 10;
+
 	private byte[] loginData;
 	private short loginData_length;
 
@@ -164,6 +166,8 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 	private byte terminated = FALSE_BYTE;
 
+	private byte fi_counter;
+
 	public static void install(byte[] bArray, short bOffset, byte bLength) {
 		new OpenPGPApplet().register(bArray, (short) (bOffset + 1),
                 bArray[bOffset]);
@@ -219,6 +223,8 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		ca1_fp = new byte[FP_LENGTH];
 		ca2_fp = new byte[FP_LENGTH];
 		ca3_fp = new byte[FP_LENGTH];
+
+		fi_counter = 0;
 	}
 
 	public OpenPGPApplet() {
@@ -657,9 +663,23 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
 
 		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
-		increaseDSCounter();
+
 
 		short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
+
+		// Perform the operation again for double check
+		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+
+		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
+		short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
+
+		if (!compareByteSubarrays(buffer, in_received, length, checkBuffer, _0, checkLength)) {
+			++fi_counter;
+			if (fi_counter >= FI_MAX)
+				eraseKeys();
+		}
+
+		increaseDSCounter();
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
 		return length;
 	}
@@ -1551,5 +1571,34 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				break;
 			}
 		}
+	}
+
+	private short randomDelay() {
+		byte[] tmp = JCSystem.makeTransientByteArray((short) 2, JCSystem.CLEAR_ON_DESELECT);
+		short dummy = 0;
+		random.generateData(tmp, _0, (short) 2);
+		short iterations = (short) (tmp[0]<<8 | tmp[1]);
+		for (short i = _0; i < iterations; ++i) {
+			dummy *= i;
+		}
+		return dummy; // to prevent optimizing the loop out
+	}
+
+	private static boolean compareByteSubarrays(byte[] a1, short offset1, short length1, byte[] a2, short offset2, short length2) {
+		if (length1 != length2)
+			return false;
+		for (short i = _0; i < length1; ++i)
+			if (a1[offset1 + i] != a2[offset2 + i])
+				return false;
+		return true;
+	}
+
+	private void eraseKeys() {
+		sig_key.getPrivate().clearKey();
+		dec_key.getPrivate().clearKey();
+		auth_key.getPrivate().clearKey();
+		sig_key.getPublic().clearKey();
+		dec_key.getPublic().clearKey();
+		auth_key.getPublic().clearKey();
 	}
 }

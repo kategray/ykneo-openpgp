@@ -94,6 +94,9 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 	private static final short SW_REFERENCED_DATA_NOT_FOUND = 0x6A88;
 
+	private static final byte FALSE_BYTE = 0x5A;
+	private static final byte TRUE_BYTE = (byte) 0xA5;
+
 	private byte[] loginData;
 	private short loginData_length;
 
@@ -159,7 +162,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	private OpenPGPSecureMessaging sm;
 	private boolean sm_success = false;
 
-	private boolean terminated = false;
+	private byte terminated = FALSE_BYTE;
 
 	public static void install(byte[] bArray, short bOffset, byte bLength) {
 		new OpenPGPApplet().register(bArray, (short) (bOffset + 1),
@@ -275,7 +278,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				out_left = 0;
 			}
 
-			if (terminated == true && ins != 0x44) {
+			if (terminated != FALSE_BYTE && ins != 0x44) {
 				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 			}
 
@@ -359,7 +362,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			// E6 - TERMINATE DF
 			case (byte) 0xE6:
 				if (pw1.getTriesRemaining() == 0 && pw3.getTriesRemaining() == 0) {
-					terminated = true;
+					terminated = TRUE_BYTE;
 				} else {
 					ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 				}
@@ -367,9 +370,9 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 			// 44 - ACTIVATE FILE
 			case (byte) 0x44:
-				if (terminated == true) {
+				if (terminated == TRUE_BYTE) {
 					initialize();
-					terminated = false;
+					terminated = FALSE_BYTE;
 					JCSystem.requestObjectDeletion();
 				} else {
 					ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);

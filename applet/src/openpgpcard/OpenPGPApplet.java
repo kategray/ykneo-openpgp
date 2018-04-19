@@ -1716,17 +1716,26 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		}
 	}
 
+	/**
+	 * Wait for a random amount of time.
+	 *
+	 * @return dummy variable (just to force the compiler to include the loop)
+	 */
 	private short randomDelay() {
 		byte[] tmp = JCSystem.makeTransientByteArray((short) 2, JCSystem.CLEAR_ON_DESELECT);
 		short dummy = 0;
 		random.generateData(tmp, _0, (short) 2);
 		short iterations = (short) (tmp[0]<<8 | tmp[1]);
 		for (short i = _0; i < iterations; ++i) {
-			dummy *= i;
+			dummy *= 3;
 		}
 		return dummy; // to prevent optimizing the loop out
 	}
 
+	/**
+	 * Register a possible fault induction attack attempt and throw INVALID_STATE.
+	 * In case of crossing the acceptable number of incidents, erase keys and throw APPLET_INVALIDATED.
+	 */
 	private void registerFaultInduction() {
 		++fi_counter;
 		if (fi_counter >= FI_MAX) {
@@ -1736,6 +1745,16 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		ISOException.throwIt(INVALID_STATE);
 	}
 
+	/**
+	 * Check the results of two identical cryptographic operations in order to detect
+	 * fault induction attack attempts.
+	 * @param a1
+	 * @param offset1
+	 * @param length1
+	 * @param a2
+	 * @param offset2
+	 * @param length2
+	 */
 	private void checkResults(byte[] a1, short offset1, short length1, byte[] a2, short offset2, short length2) {
 		if (length1 != length2)
 			registerFaultInduction();
@@ -1746,6 +1765,9 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		}
 	}
 
+	/**
+	 * Erase all RSA key pairs.
+	 */
 	private void eraseKeys() {
 		sig_key.getPrivate().clearKey();
 		dec_key.getPrivate().clearKey();

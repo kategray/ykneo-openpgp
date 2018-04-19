@@ -446,7 +446,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				}
 				JCSystem.requestObjectDeletion();
 			} else {
-				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+				registerFaultInduction();
 			}
 		} else {
 			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
@@ -545,7 +545,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			} else if (pw1.check(buffer, _0, (byte) in_received)) {
 				if (mode == (byte) 0x81) {
 					pw1_modes[PW1_MODE_NO81] = TRUE_BYTE;
-				} else if (mode == (byte) 0x82){
+				} else if (mode == (byte) 0x82) {
 					pw1_modes[PW1_MODE_NO82] = TRUE_BYTE;
 				}
 			} else {
@@ -637,7 +637,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				if (!(pw3.isValidated() == false)) {
 					new_length = in_received;
 				} else {
-					ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+					registerFaultInduction();
 				}
 			} else {
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
@@ -671,7 +671,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 */
 	private short computeDigitalSignature(APDU apdu) {
 		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO81] == TRUE_BYTE) {
-			if (! (pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO81] == FALSE_BYTE) {
+			if (! (pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO81] != TRUE_BYTE) {
 				if (pw1_status == (byte) 0x00)
 					pw1_modes[PW1_MODE_NO81] = FALSE_BYTE;
 
@@ -692,7 +692,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
 				return length;
 			} else {
-				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				registerFaultInduction();
 			}
 		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -713,7 +713,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	private short decipher(APDU apdu) {
 		// DECIPHER
 		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
-			if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] == FALSE_BYTE) {
+			if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) {
 				if (!dec_key.getPrivate().isInitialized())
 					ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
 
@@ -731,7 +731,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
 				return length;
 			} else {
-				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				registerFaultInduction();
 			}
 		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -750,7 +750,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 */
 	private short internalAuthenticate(APDU apdu) {
 		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
-			if (! (pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] == FALSE_BYTE) {
+			if (! (pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) {
 				if (!auth_key.getPrivate().isInitialized())
 					ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
 
@@ -766,7 +766,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
 				return length;
 			} else {
-				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				registerFaultInduction();
 			}
 		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -791,18 +791,15 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @return Length of data written in buffer
 	 */
 	private short genAsymKey(APDU apdu, byte mode) {
+		if (mode == (byte) 0x80 || mode == (byte) 0x81) {
 
-		if (pw3.isValidated()) {
-			if (!(pw3.isValidated() == false)) {
-
-				if (mode == (byte) 0x80 || mode == (byte) 0x81) {
-
+			if (pw3.isValidated()) {
+				if (!(pw3.isValidated() == false)) {
 					PGPKey key = getKey(buffer[0]);
 
 					if (mode == (byte) 0x80) {
 						key.genKeyPair();
-
-						if (buffer[0] == (byte) 0xB6) {
+							if (buffer[0] == (byte) 0xB6) {
 							Util.arrayFillNonAtomic(ds_counter, _0, (short) 3, (byte) 0);
 						}
 					}
@@ -811,14 +808,15 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 					return sendPublicKey(key);
 
 				} else {
-					ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+					registerFaultInduction();
 				}
 
 			} else {
 				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 			}
+
 		} else {
-			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 		}
 		return 0;
 	}
@@ -1029,10 +1027,10 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		case (short) 0x0103:
 			// For private use DO 3, PW1 must be verified with mode 82 to read
 			if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
-				if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] == FALSE_BYTE) {
+				if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) {
 					return Util.arrayCopyNonAtomic(private_use_do_3, _0, buffer, _0, private_use_do_3_length);
 				} else {
-					ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+					registerFaultInduction();
 				}
 			} else {
 				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -1045,7 +1043,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				if (!(pw3.isValidated() == false)) {
 					return Util.arrayCopyNonAtomic(private_use_do_4, _0, buffer, _0, private_use_do_4_length);
 				} else {
-					ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+					registerFaultInduction();
 				}
 			} else {
 				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -1074,7 +1072,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			// Special case for private use DO's 1 and 3: these can be written if
 			// PW1 is verified with mode 82. All others require PW3 verification.
 			if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
-				if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] == FALSE_BYTE) {
+				if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) {
 					if (in_received > PRIVATE_DO_MAX_LENGTH)
 						ISOException.throwIt(SW_WRONG_LENGTH);
 
@@ -1097,7 +1095,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 					}
 					return;
 				} else {
-					ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+					registerFaultInduction();
 				}
 			} else {
 				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -1328,7 +1326,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 						break;
 				}
 			} else {
-				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				registerFaultInduction();
 			}
 		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -1429,7 +1427,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				key.setModulus(buffer, offset_data, len_modulus);
 				offset_data += len_modulus;
 			} else {
-				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				registerFaultInduction();
 			}
 		} else {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -1674,25 +1672,22 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		return dummy; // to prevent optimizing the loop out
 	}
 
-	private void checkResults(byte[] a1, short offset1, short length1, byte[] a2, short offset2, short length2) {
-		if (length1 != length2) {
-			++fi_counter;
-			if (fi_counter >= FI_MAX) {
-				eraseKeys();
-				ISOException.throwIt(APPLET_INVALIDATED);
-			}
-			ISOException.throwIt(INVALID_STATE);
+	private void registerFaultInduction() {
+		++fi_counter;
+		if (fi_counter >= FI_MAX) {
+			eraseKeys();
+			ISOException.throwIt(APPLET_INVALIDATED);
 		}
+		ISOException.throwIt(INVALID_STATE);
+	}
+
+	private void checkResults(byte[] a1, short offset1, short length1, byte[] a2, short offset2, short length2) {
+		if (length1 != length2)
+			registerFaultInduction();
 
 		for (short i = _0; i < length1; ++i) {
-			if (a1[(short) (offset1 + i)] != a2[(short) (offset2 + i)]) {
-				++fi_counter;
-				if (fi_counter >= FI_MAX) {
-					eraseKeys();
-					ISOException.throwIt(APPLET_INVALIDATED);
-				}
-				ISOException.throwIt(INVALID_STATE);
-			}
+			if (a1[(short) (offset1 + i)] != a2[(short) (offset2 + i)])
+				registerFaultInduction();
 		}
 	}
 

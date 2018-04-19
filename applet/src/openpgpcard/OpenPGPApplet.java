@@ -536,29 +536,31 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			// Check length of input
 			if (in_received < PW1_MIN_LENGTH || in_received > PW1_MAX_LENGTH)
 				ISOException.throwIt(SW_WRONG_DATA);
-
 			// Check given PW1 and set requested mode if verified succesfully
 			if (pw1.getTriesRemaining() == 0) {
 				ISOException.throwIt(SW_AUTHENTICATION_BLOCKED);
-			} else if (pw1.check(buffer, _0, (byte) in_received)) {
-				if (mode == (byte) 0x81) {
-					pw1_modes[PW1_MODE_NO81] = TRUE_BYTE;
-				} else if (mode == (byte) 0x82) {
-					pw1_modes[PW1_MODE_NO82] = TRUE_BYTE;
-				}
 			} else {
-				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				if (pw1.check(buffer, _0, (byte) in_received)) {
+					if (mode == (byte) 0x81) {
+						pw1_modes[PW1_MODE_NO81] = TRUE_BYTE;
+					} else if (mode == (byte) 0x82) {
+						pw1_modes[PW1_MODE_NO82] = TRUE_BYTE;
+					}
+				} else {
+					ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				}
 			}
 		} else if (mode == (byte) 0x83) {
 			// Check length of input
 			if (in_received < PW3_MIN_LENGTH || in_received > PW3_MAX_LENGTH)
 				ISOException.throwIt(SW_WRONG_DATA);
-
 			// Check PW3
 			if (pw3.getTriesRemaining() == 0) {
 				ISOException.throwIt(SW_AUTHENTICATION_BLOCKED);
-			} else if (!pw3.check(buffer, _0, (byte) in_received)) {
-				ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			} else {
+				if (!pw3.check(buffer, _0, (byte) in_received)) {
+					ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+				}
 			}
 		} else {
 			ISOException.throwIt(SW_INCORRECT_P1P2);
@@ -575,14 +577,22 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 *            Password to be changed
 	 */
 	private void changeReferenceData(APDU apdu, byte mode) {
+		short counter = 0;
 		if (mode == (byte) 0x81) {
+			++counter;
 			// Check length of the new password
 			short new_length = (short) (in_received - pw1_length);
+			++counter;
 			if (new_length < PW1_MIN_LENGTH || new_length > PW1_MAX_LENGTH)
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+			++counter;
 
 			if (!pw1.check(buffer, _0, pw1_length))
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+			++counter;
+
+			if (counter != 4)
+				registerFaultInduction();
 
 			// Change PW1
 			JCSystem.beginTransaction();
@@ -592,13 +602,20 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			pw1_modes[PW1_MODE_NO82] = FALSE_BYTE;
 			JCSystem.commitTransaction();
 		} else if (mode == (byte) 0x83) {
+			++counter;
 			// Check length of the new password
 			short new_length = (short) (in_received - pw3_length);
+			++counter;
 			if (new_length < PW3_MIN_LENGTH || new_length > PW3_MAX_LENGTH)
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+			++counter;
 
 			if (!pw3.check(buffer, _0, pw3_length))
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+			++counter;
+
+			if (counter != 4)
+				registerFaultInduction();
 
 			// Change PW3
 			JCSystem.beginTransaction();
@@ -618,31 +635,50 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 *            Mode used to reset PW1
 	 */
 	private void resetRetryCounter(APDU apdu, byte mode) {
+		short counter = 0;
 		short new_length = 0;
 		short offs = 0;
 		if (mode == (byte) 0x00) {
+			++counter;
 			// Authentication using RC
 			if (rc_length == 0)
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+			++counter;
 
 			new_length = (short) (in_received - rc_length);
+			++counter;
+
 			offs = rc_length;
+			++counter;
+
 			if (!rc.check(buffer, _0, rc_length))
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+			++counter;
+
 		} else if (mode == (byte) 0x02) {
+			++counter;
 			// Authentication using PW3
 			if (!pw3.isValidated())
 				ISOException.throwIt(SW_CONDITIONS_NOT_SATISFIED);
+			++counter;
+
 			if (! (pw3.isValidated()))
 				registerFaultInduction();
+			++counter;
 
 			new_length = in_received;
+			counter += 2;
 		} else {
 			ISOException.throwIt(SW_WRONG_P1P2);
 		}
 
+		++counter;
 		if (new_length < PW1_MIN_LENGTH || new_length > PW1_MAX_LENGTH)
 			ISOException.throwIt(SW_WRONG_DATA);
+		++counter;
+
+		if (counter != 7)
+			registerFaultInduction();
 
 		// Change PW1
 		JCSystem.beginTransaction();
@@ -665,27 +701,42 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @return Length of data written in buffer
 	 */
 	private short computeDigitalSignature(APDU apdu) {
+		short counter = 0;
 		if (!(pw1.isValidated() && pw1_modes[PW1_MODE_NO81] == TRUE_BYTE))
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+		++counter;
 		if (!pw1.isValidated() || pw1_modes[PW1_MODE_NO81] != TRUE_BYTE)
 			registerFaultInduction();
+		++counter;
 
 		if (pw1_status == (byte) 0x00)
 			pw1_modes[PW1_MODE_NO81] = FALSE_BYTE;
+		++counter;
 
 		if (!sig_key.getPrivate().isInitialized())
 			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
+		++counter;
 
 		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
+		++counter;
 
 		randomDelay();
+		++counter;
 		short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
+		++counter;
 
 		// Perform the operation again for double check
 		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+		++counter;
 		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
+		++counter;
 		short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
+		++counter;
 		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
+		++counter;
+
+		if (counter != 11)
+			registerFaultInduction();
 
 		increaseDSCounter();
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
@@ -703,26 +754,40 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @return Length of data written in buffer
 	 */
 	private short decipher(APDU apdu) {
+		short counter = 0;
 		// DECIPHER
 		if (!(pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE))
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+		++counter;
 		if (!pw1.isValidated() || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE)
 			registerFaultInduction();
+		++counter;
 
 		if (!dec_key.getPrivate().isInitialized())
 			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
+		++counter;
 
 		cipher.init(dec_key.getPrivate(), Cipher.MODE_DECRYPT);
+		++counter;
 
 		randomDelay();
+		++counter;
 		// Start at offset 1 to omit padding indicator byte
 		short length = cipher.doFinal(buffer, (short) 1, (short) (in_received - 1), buffer, in_received);
+		++counter;
 
 		// Perform the operation again for double check
 		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+		++counter;
 		cipher.init(dec_key.getPrivate(), Cipher.MODE_DECRYPT);
+		++counter;
 		short checkLength = cipher.doFinal(buffer, (short) 1, (short) (in_received - 1), checkBuffer, _0);
-		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
+		++counter;
+		checkResults(buffer, in_received, length, checkBuffer, _0, (short) (checkLength - 1));
+		++counter;
+
+		if (counter != 10)
+			registerFaultInduction();
 
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
 		return length;
@@ -738,24 +803,38 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @return Length of data written in buffer
 	 */
 	private short internalAuthenticate(APDU apdu) {
+		short counter = 0;
 		if (! (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) )
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+		++counter;
 		if (!pw1.isValidated() || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE)
 			registerFaultInduction();
+		++counter;
 
 		if (!auth_key.getPrivate().isInitialized())
 			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
+		++counter;
 
 		cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
+		++counter;
 
 		randomDelay();
+		++counter;
 		short length = cipher.doFinal(buffer, _0, in_received, buffer, in_received);
+		++counter;
 
 		// Perform the operation again for double check
 		byte[] checkBuffer = JCSystem.makeTransientByteArray(length, JCSystem.CLEAR_ON_DESELECT);
+		++counter;
 		cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
+		++counter;
 		short checkLength = cipher.doFinal(buffer, _0, in_received, checkBuffer, _0);
+		++counter;
 		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
+		++counter;
+
+		if (counter != 10)
+			registerFaultInduction();
 
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
 
@@ -779,23 +858,36 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 * @return Length of data written in buffer
 	 */
 	private short genAsymKey(APDU apdu, byte mode) {
+		short counter = 0;
 		if (! (mode == (byte) 0x80 || mode == (byte) 0x81) )
 			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+		++counter;
 
 		if (!pw3.isValidated())
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+		++counter;
 
 		if (!pw3.isValidated())
 			registerFaultInduction();
+		++counter;
 
 		PGPKey key = getKey(buffer[0]);
+		++counter;
 
 		if (mode == (byte) 0x80) {
+			++counter;
 			key.genKeyPair();
+			++counter;
 			if (buffer[0] == (byte) 0xB6) {
 				Util.arrayFillNonAtomic(ds_counter, _0, (short) 3, (byte) 0);
 			}
+			++counter;
+		} else {
+			counter += 3;
 		}
+
+		if (counter != 7)
+			registerFaultInduction();
 
 		// Output requested key
 		return sendPublicKey(key);

@@ -28,12 +28,16 @@ public class PGPKey implements ISO7816 {
 	public static final short EXPONENT_SIZE = 17;
 	public static final short EXPONENT_SIZE_BYTES = 3;
 	public static final short FP_SIZE = 20;
+	private static final short DIGEST_LENGTH = 32;
 
 	private KeyPair key;
+	private byte[] dgst;
 	private byte[] fp;
 	private byte[] time = { 0x00, 0x00, 0x00, 0x00 };
 	private byte[] attributes = { 0x01, 0x00, 0x00, 0x00, 0x00, 0x03 };
 	private static byte[] tmpBuf;
+
+	private MessageDigest digest;
 
 	public PGPKey() {
 		key = new KeyPair(KeyPair.ALG_RSA_CRT, KEY_SIZE);
@@ -47,6 +51,11 @@ public class PGPKey implements ISO7816 {
 		if(tmpBuf == null) {
 			tmpBuf = JCSystem.makeTransientByteArray((short) (KEY_SIZE_BYTES / 2), JCSystem.CLEAR_ON_DESELECT);
 		}
+
+		dgst = new byte[DIGEST_LENGTH];
+		Util.arrayFillNonAtomic(dgst, (short) 0, (short) dgst.length, (byte) 0);
+		digest = MessageDigest.getInstance(MessageDigest.ALG_SHA_256,false);
+		computeDigest(dgst);
 	}
 
 	/**
@@ -54,6 +63,28 @@ public class PGPKey implements ISO7816 {
 	 */
 	public void genKeyPair() {
 		key.genKeyPair();
+	}
+
+	/**
+	 * Computes digest of key metadata
+	 *
+	 * @param destination
+	 */
+	public void computeDigest(byte[] destination) {
+		digest.reset();
+		digest.update(fp, (short) 0, (short) fp.length);
+		digest.update(time, (short) 0, (short) time.length);
+		digest.doFinal(attributes, (short) 0, (short) attributes.length, destination, (short) 0);
+	}
+
+	/**
+	 * Compares given digest with the actual digest of the key metadata.
+	 *
+	 * @param meta digest
+	 * @return
+	 */
+	public byte compareMetaDigest(byte[] meta) {
+		return Util.arrayCompare(dgst, (short) 0, meta, (short) 0, DIGEST_LENGTH);
 	}
 
 	/**
@@ -70,6 +101,7 @@ public class PGPKey implements ISO7816 {
 			ISOException.throwIt(SW_UNKNOWN);
 
 		Util.arrayCopyNonAtomic(data, offset, fp, (short) 0, (short) fp.length);
+		computeDigest(dgst);
 	}
 
 	/**
@@ -86,6 +118,7 @@ public class PGPKey implements ISO7816 {
 			ISOException.throwIt(SW_UNKNOWN);
 
 		Util.arrayCopyNonAtomic(data, offset, time, (short) 0, (short) 4);
+		computeDigest(dgst);
 	}
 
 	/**
@@ -159,6 +192,8 @@ public class PGPKey implements ISO7816 {
 	}
 
 	/**
+	 * EXPERIMENTAL: Provide functionality for importing keys.
+	 *
 	 * Sets the value of the DP1 parameter. The plain text data format is
 	 * big-endian and right-aligned (the least significant bit is the least
 	 * significant bit of last byte). Input DP1 parameter data is copied into
@@ -179,6 +214,8 @@ public class PGPKey implements ISO7816 {
 	}
 
 	/**
+	 * EXPERIMENTAL: Provide functionality for importing keys.
+	 *
 	 * Sets the value of the DQ1 parameter. The plain text data format is
 	 * big-endian and right-aligned (the least significant bit is the least
 	 * significant bit of last byte). Input DQ1 parameter data is copied into
@@ -199,6 +236,8 @@ public class PGPKey implements ISO7816 {
 	}
 
 	/**
+	 * EXPERIMENTAL: Provide functionality for importing keys.
+	 *
 	 * Sets the value of the P parameter. The plain text data format is
 	 * big-endian and right-aligned (the least significant bit is the least
 	 * significant bit of last byte). Input P parameter data is copied into the
@@ -217,6 +256,8 @@ public class PGPKey implements ISO7816 {
 	}
 
 	/**
+	 * EXPERIMENTAL: Provide functionality for importing keys.
+	 *
 	 * Sets the value of the PQ parameter. The plain text data format is
 	 * big-endian and right-aligned (the least significant bit is the least
 	 * significant bit of last byte). Input PQ parameter data is copied into the
@@ -237,6 +278,8 @@ public class PGPKey implements ISO7816 {
 	}
 
 	/**
+	 * EXPERIMENTAL: Provide functionality for importing keys.
+	 *
 	 * Sets the value of the Q parameter. The plain text data format is
 	 * big-endian and right-aligned (the least significant bit is the least
 	 * significant bit of last byte). Input Q parameter data is copied into the
@@ -255,6 +298,8 @@ public class PGPKey implements ISO7816 {
 	}
 
 	/**
+	 * EXPERIMENTAL: Provide functionality for importing keys.
+	 *
 	 * Sets the value of the Exponent parameter. The plain text data format is
 	 * big-endian and right-aligned (the least significant bit is the least
 	 * significant bit of last byte). Input Exponent parameter data is copied
@@ -273,6 +318,8 @@ public class PGPKey implements ISO7816 {
 	}
 
 	/**
+	 * EXPERIMENTAL: Provide functionality for importing keys.
+	 *
 	 * Sets the value of the Modulus parameter. The plain text data format is
 	 * big-endian and right-aligned (the least significant bit is the least
 	 * significant bit of last byte). Input Modulus parameter data is copied

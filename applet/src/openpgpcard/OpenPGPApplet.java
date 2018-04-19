@@ -155,7 +155,6 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 
 	private Cipher cipher;
 	private RandomData random;
-	private MessageDigest digest;
 
 	private byte[] buffer;
 	private short out_left = 0;
@@ -172,6 +171,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	private byte terminated = FALSE_BYTE;
 
 	private byte fi_counter;
+	private byte[] tmp_digest;
 
 	public static void install(byte[] bArray, short bOffset, byte bLength) {
 		new OpenPGPApplet().register(bArray, (short) (bOffset + 1),
@@ -238,10 +238,11 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 				JCSystem.CLEAR_ON_DESELECT);
 		pw1_modes = JCSystem.makeTransientByteArray((short) 2,
 				JCSystem.CLEAR_ON_DESELECT);
+		tmp_digest = JCSystem.makeTransientByteArray(DIGEST_LENGTH,
+				JCSystem.CLEAR_ON_DESELECT);
 
 		cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false);
 		random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
-		digest = MessageDigest.getInstance(MessageDigest.ALG_SHA_256,false);
 		
 		sm = new OpenPGPSecureMessaging();
 
@@ -363,6 +364,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			// DB - PUT DATA (Odd)
 			case (byte) 0xDB:
 				// Odd PUT DATA only supported for importing keys
+				// EXPERIMENTAL
 				// 4D - Extended Header list
 				if (p1p2 == (short) 0x3FFF) {
 					importKey(apdu);
@@ -717,6 +719,13 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
 		++counter;
 
+		Util.arrayFillNonAtomic(tmp_digest,_0, DIGEST_LENGTH, (byte) 0);
+		sig_key.computeDigest(tmp_digest);
+		if (sig_key.compareMetaDigest(tmp_digest) != (byte) 0) {
+			ISOException.throwIt(SW_DATA_INVALID);
+		}
+		++counter;
+
 		cipher.init(sig_key.getPrivate(), Cipher.MODE_ENCRYPT);
 		++counter;
 
@@ -735,7 +744,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
 		++counter;
 
-		if (counter != 11)
+		if (counter != 12)
 			registerFaultInduction();
 
 		increaseDSCounter();
@@ -767,6 +776,13 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
 		++counter;
 
+		Util.arrayFillNonAtomic(tmp_digest,_0, DIGEST_LENGTH, (byte) 0);
+		dec_key.computeDigest(tmp_digest);
+		if (dec_key.compareMetaDigest(tmp_digest) != (byte) 0) {
+			ISOException.throwIt(SW_DATA_INVALID);
+		}
+		++counter;
+
 		cipher.init(dec_key.getPrivate(), Cipher.MODE_DECRYPT);
 		++counter;
 
@@ -786,7 +802,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		checkResults(buffer, in_received, length, checkBuffer, _0, (short) (checkLength - 1));
 		++counter;
 
-		if (counter != 10)
+		if (counter != 11)
 			registerFaultInduction();
 
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);
@@ -815,6 +831,13 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
 		++counter;
 
+		Util.arrayFillNonAtomic(tmp_digest,_0, DIGEST_LENGTH, (byte) 0);
+		auth_key.computeDigest(tmp_digest);
+		if (auth_key.compareMetaDigest(tmp_digest) != (byte) 0) {
+			ISOException.throwIt(SW_DATA_INVALID);
+		}
+		++counter;
+
 		cipher.init(auth_key.getPrivate(), Cipher.MODE_ENCRYPT);
 		++counter;
 
@@ -833,7 +856,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		checkResults(buffer, in_received, length, checkBuffer, _0, checkLength);
 		++counter;
 
-		if (counter != 10)
+		if (counter != 11)
 			registerFaultInduction();
 
 		Util.arrayCopyNonAtomic(buffer, in_received, buffer, _0, length);

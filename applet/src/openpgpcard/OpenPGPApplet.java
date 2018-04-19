@@ -671,7 +671,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 */
 	private short computeDigitalSignature(APDU apdu) {
 		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO81] == TRUE_BYTE) {
-			if (! (pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO81] != TRUE_BYTE) {
+			if (! (pw1.isValidated() == false || pw1_modes[PW1_MODE_NO81] != TRUE_BYTE) ) {
 				if (pw1_status == (byte) 0x00)
 					pw1_modes[PW1_MODE_NO81] = FALSE_BYTE;
 
@@ -713,7 +713,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	private short decipher(APDU apdu) {
 		// DECIPHER
 		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
-			if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) {
+			if (!(pw1.isValidated() == false || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) ) {
 				if (!dec_key.getPrivate().isInitialized())
 					ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
 
@@ -750,7 +750,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 	 */
 	private short internalAuthenticate(APDU apdu) {
 		if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
-			if (! (pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) {
+			if (! (pw1.isValidated() == false || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) ) {
 				if (!auth_key.getPrivate().isInitialized())
 					ISOException.throwIt(SW_REFERENCED_DATA_NOT_FOUND);
 
@@ -1027,7 +1027,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 		case (short) 0x0103:
 			// For private use DO 3, PW1 must be verified with mode 82 to read
 			if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
-				if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) {
+				if (!(pw1.isValidated() == false || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) ) {
 					return Util.arrayCopyNonAtomic(private_use_do_3, _0, buffer, _0, private_use_do_3_length);
 				} else {
 					registerFaultInduction();
@@ -1072,7 +1072,7 @@ public class OpenPGPApplet extends Applet implements ISO7816 {
 			// Special case for private use DO's 1 and 3: these can be written if
 			// PW1 is verified with mode 82. All others require PW3 verification.
 			if (pw1.isValidated() && pw1_modes[PW1_MODE_NO82] == TRUE_BYTE) {
-				if (!(pw1.isValidated() == false) || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) {
+				if (!(pw1.isValidated() == false || pw1_modes[PW1_MODE_NO82] != TRUE_BYTE) ) {
 					if (in_received > PRIVATE_DO_MAX_LENGTH)
 						ISOException.throwIt(SW_WRONG_LENGTH);
 

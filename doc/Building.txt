@@ -13,17 +13,19 @@ We usually suggest using Ant.
 
 Installing JCKit
 ----------------
+In order to build with modern JDK versions, it is necessary to install a modern JDK.  To target older cards, a target SDK
+of 2.2.2 is also required.
+
+Install the Java Card Classic Development Kit, version 3.0.5u3, downloaded from:
+https://www.oracle.com/technetwork/java/javasebusiness/downloads/java-archive-downloads-javame-419430.html#java_card_kit-classic-3_0_5-ga-win32-bin-do
+
+This installer is windows-only.  Copy the files (typically installed to C:\Program Files (x86)\Oracle\Java Card Development Kit 3.0.5u3),
+to the folder jckit/sdk-3.0.5
 
 Install the Java Card Development Kit version 2.2.2, download it from:
 http://www.oracle.com/technetwork/java/javasebusiness/downloads/java-archive-downloads-javame-419430.html#java_card_kit-2.2.2-oth-JPR
 
-Unpack it into a new directory called for example "jckit" folder:
-
-  $ mkdir jckit
-  $ cd jckit
-  $ unzip /path/to/java_card_kit-2_2_2-linux.zip
-  $ cd java_card_kit-2_2_2/
-  $ unzip java_card_kit-2_2_2-rr-bin-linux-do.zip
+Extract the contents of java_card_kit-2_2_2-rr-bin-*-do.zip to jckit/sdk-2.2.2
 
 Installing JCardSim
 -------------------
@@ -38,14 +40,11 @@ The SHA256 checksum on the file we have successfully used is:
 Ant
 ---
 
-The project can now be built by invoking ant, supplying the path to
-JCKit.  For example:
-
-  ant -DJAVACARD_HOME=/path/to/jckit/java_card_kit-2_2_2/
+The project can now be built by invoking ant.
 
 The cap file for loading on card will be at:
 
- ./applet/bin/openpgpcard/javacard/openpgpcard.cap
+ ./applet/bin/openpgpcard.cap
 
 Eclipe and eclipse-jcde
 -----------------------
